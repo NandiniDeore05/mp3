@@ -14,7 +14,7 @@ var app = express();
 var port = process.env.PORT || 3000;
 
 // Connect to a MongoDB --> Uncomment this once you have a connection string!!
-//mongoose.connect(process.env.MONGODB_URI,  { useNewUrlParser: true });
+mongoose.connect(process.env.MONGODB_URI,  { useNewUrlParser: true });
 
 // Allow CORS so that backend and frontend could be put on different servers
 var allowCrossDomain = function (req, res, next) {
@@ -33,6 +33,38 @@ app.use(bodyParser.json());
 
 // Use routes as a module (see index.js)
 require('./routes')(app, router);
+
+app.use(function (req, res, next) {
+    res.status(404).json({ message: 'Not Found', data: {} });
+});
+
+app.use(function (err, req, res, next) {
+    console.error('Unhandled Error:', err);
+
+    if (res.headersSent) {
+        return next(err);
+    }
+
+    if (err.name === 'ValidationError') {
+        return res.status(400).json({ message: 'Validation error', data: err.message });
+    }
+    if (err.name === 'CastError') {
+        return res.status(400).json({ message: 'Bad id format', data: err.message });
+    }
+    if (err.code === 11000) {
+        return res.status(400).json({ message: 'Duplicate key', data: err.keyValue || {} });
+    }
+
+    if (err.status && Number.isInteger(err.status)) {
+        return res.status(err.status).json({ message: err.message || 'Error', data: {} });
+    }
+
+    const payload = process.env.NODE_ENV === 'production'
+        ? { message: 'Internal Server Error', data: {} }
+        : { message: err.message || 'Internal Server Error', data: err.stack || err };
+
+    res.status(500).json(payload);
+});
 
 // Start the server
 app.listen(port);
